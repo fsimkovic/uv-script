@@ -1,6 +1,6 @@
 [project]
 name = "uv-scripts"
-version = "0.1.1"
+version = "0.1.2"
 description = "A lightweight script runner for uv — define and run project scripts from pyproject.toml"
 readme = "README.md"
 license = "MIT"
