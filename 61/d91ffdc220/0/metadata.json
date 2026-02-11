@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "61d91ffdc220",
+  "session_id": "621c0d0c-06b9-436a-8623-dee0dfd02d84",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-11T23:17:24.967416Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "tests/test_editable_integration.py"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "220e459e-f8aa-475e-b724-18c8ab4c1c96",
+  "token_usage": {
+    "input_tokens": 69,
+    "cache_creation_tokens": 89119,
+    "cache_read_tokens": 4379827,
+    "output_tokens": 20047,
+    "api_call_count": 59
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-11T23:17:24.917044Z",
+    "agent_lines": 34,
+    "human_added": 374,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 408,
+    "agent_percentage": 8.333333333333332
+  }
+}

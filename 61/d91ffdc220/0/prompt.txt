@@ -1,0 +1,22 @@
+the editable installs  don't work currently. I believe they clash with the dependencies specified for the project.                                                                                                                                
+                                                                                                                                                                                                                                                    
+  what I want you to first plan out is how we can create a reproducible example that we can encode in the tests.                                                                                                                                    
+                                                                                                                                                                                                                                                    
+  the normal structure I have is directory A which contains packages X and Y. Y has a dependency on X, and specifies this in the pyproject.toml via dependencies, e.g. X >=0.1.2. Then, in the uvs section, I specify in editable something like    
+  "../X".
+
+---
+
+[Request interrupted by user]
+
+---
+
+continue
+
+---
+
+I don't have a uv.lock file. I am using a private index that behaves the same as PyPi.
+
+---
+
+tidy up the code, commit the tests.
