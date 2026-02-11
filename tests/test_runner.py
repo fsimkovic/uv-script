@@ -191,6 +191,28 @@ class TestRunScript:
             assert cmd[0:4] == ["uv", "run", "--with-editable", "/pkg1"]
 
     @patch("uv_script.runner.subprocess.run")
+    def test_editable_overlaps_with_project_dependency(self, mock_run, simple_scripts):
+        """--with-editable is added without awareness of project dependencies.
+
+        When package X is both in [project].dependencies and [tool.uvs].editable,
+        the runner just adds --with-editable. This does not tell uv to use the
+        editable to *satisfy* the dependency, so uv resolves X from the index
+        (non-editable) and effectively ignores the editable.
+        """
+        mock_run.return_value.returncode = 0
+        run_script(
+            simple_scripts["test"],
+            simple_scripts,
+            editable=["/workspace/X"],
+        )
+        call_args = mock_run.call_args[0][0]
+        assert call_args == [
+            "uv", "run",
+            "--with-editable", "/workspace/X",
+            "pytest", "tests/",
+        ]
+
+    @patch("uv_script.runner.subprocess.run")
     def test_features_flags_in_command(self, mock_run, simple_scripts):
         mock_run.return_value.returncode = 0
         run_script(
