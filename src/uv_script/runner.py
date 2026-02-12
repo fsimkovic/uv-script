@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shlex
 import subprocess
 import sys
+import tempfile
 
 from uv_script.config import ConfigError, ScriptDef
 
@@ -21,13 +23,32 @@ def run_script(
     """Execute a script definition. Returns exit code (0 = success)."""
     steps = resolve_steps(script, all_scripts)
 
-    for i, (cmd_str, env) in enumerate(steps):
-        if extra_args and i == len(steps) - 1:
-            cmd_str = cmd_str + " " + " ".join(shlex.quote(a) for a in extra_args)
+    find_links: str | None = None
 
-        exit_code = _exec_one(cmd_str, env, verbose, editable=editable, features=features)
-        if exit_code != 0:
-            return exit_code
+    with (
+        tempfile.TemporaryDirectory(prefix="uvs-") if editable else contextlib.nullcontext()
+    ) as tmp_dir:
+        if editable and tmp_dir:
+            try:
+                _build_editables(editable, tmp_dir)
+            except subprocess.CalledProcessError as exc:
+                print(
+                    f"uvs: failed to build editable: {exc.stderr}",
+                    file=sys.stderr,
+                )
+                return 1
+            find_links = tmp_dir
+
+        for i, (cmd_str, env) in enumerate(steps):
+            if extra_args and i == len(steps) - 1:
+                cmd_str = cmd_str + " " + " ".join(shlex.quote(a) for a in extra_args)
+
+            exit_code = _exec_one(
+                cmd_str, env, verbose,
+                editable=editable, features=features, find_links=find_links,
+            )
+            if exit_code != 0:
+                return exit_code
 
     return 0
 
@@ -62,22 +83,40 @@ def resolve_steps(
     return result
 
 
+def _build_editables(editable: list[str], build_dir: str) -> None:
+    """Build a wheel for each editable package into build_dir.
+
+    Raises subprocess.CalledProcessError if any build fails.
+    """
+    for path in editable:
+        subprocess.run(
+            ["uv", "build", "--wheel", "--out-dir", build_dir, path],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
 def _exec_one(
     cmd_str: str,
     env: dict[str, str],
     verbose: bool,
     editable: list[str] | None = None,
     features: list[str] | None = None,
+    find_links: str | None = None,
 ) -> int:
     """Execute a single command string via uv run."""
     parts = shlex.split(cmd_str)
+    find_links_flags: list[str] = []
+    if find_links:
+        find_links_flags.extend(["--find-links", find_links])
     editable_flags: list[str] = []
     for path in editable or []:
         editable_flags.extend(["--with-editable", path])
     features_flags: list[str] = []
     for name in features or []:
         features_flags.extend(["--extra", name])
-    full_cmd = ["uv", "run"] + editable_flags + features_flags + parts
+    full_cmd = ["uv", "run"] + find_links_flags + editable_flags + features_flags + parts
 
     if verbose:
         env_prefix = " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())

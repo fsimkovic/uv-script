@@ -146,7 +146,9 @@ class TestEditable:
         return tmp_path
 
     @patch("uv_script.runner.subprocess.run")
-    def test_editable_from_config(self, mock_run, editable_project):
+    def test_editable_from_config(
+        self, mock_run, editable_project, mock_editable_build
+    ):
         mock_run.return_value.returncode = 0
         pkg1 = editable_project / "pkg1"
         with pytest.raises(SystemExit) as exc_info:
@@ -155,6 +157,7 @@ class TestEditable:
         call_args = mock_run.call_args[0][0]
         assert call_args == [
             "uv", "run",
+            "--find-links", mock_editable_build.editable_dir,
             "--with-editable", str(pkg1.resolve()),
             "pytest", "tests/",
         ]

@@ -1,11 +1,12 @@
 """Tests for uv_script.runner."""
 
+import subprocess
 from unittest.mock import patch
 
 import pytest
 
 from uv_script.config import ConfigError, ScriptDef
-from uv_script.runner import resolve_steps, run_script
+from uv_script.runner import _build_editables, resolve_steps, run_script
 
 
 @pytest.fixture
@@ -76,6 +77,29 @@ class TestResolveSteps:
         assert result == [("echo starting", {"MODE": "dev"}), ("flask run", {})]
 
 
+class TestBuildEditables:
+    @patch("uv_script.runner.subprocess.run")
+    def test_builds_each_editable(self, mock_run):
+        _build_editables(["/pkg1", "/pkg2"], "/tmp/build")
+        assert mock_run.call_count == 2
+        mock_run.assert_any_call(
+            ["uv", "build", "--wheel", "--out-dir", "/tmp/build", "/pkg1"],
+            check=True, capture_output=True, text=True,
+        )
+        mock_run.assert_any_call(
+            ["uv", "build", "--wheel", "--out-dir", "/tmp/build", "/pkg2"],
+            check=True, capture_output=True, text=True,
+        )
+
+    @patch("uv_script.runner.subprocess.run")
+    def test_raises_on_build_failure(self, mock_run):
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "uv build", stderr="build error"
+        )
+        with pytest.raises(subprocess.CalledProcessError):
+            _build_editables(["/pkg1"], "/tmp/build")
+
+
 class TestRunScript:
     @patch("uv_script.runner.subprocess.run")
     def test_delegates_to_uv_run(self, mock_run, simple_scripts):
@@ -139,7 +163,9 @@ class TestRunScript:
         assert call_kwargs["env"]["FLASK_DEBUG"] == "1"
 
     @patch("uv_script.runner.subprocess.run")
-    def test_editable_flags_in_command(self, mock_run, simple_scripts):
+    def test_editable_flags_in_command(
+        self, mock_run, simple_scripts, mock_editable_build
+    ):
         mock_run.return_value.returncode = 0
         run_script(
             simple_scripts["test"],
@@ -149,6 +175,7 @@ class TestRunScript:
         call_args = mock_run.call_args[0][0]
         assert call_args == [
             "uv", "run",
+            "--find-links", mock_editable_build.editable_dir,
             "--with-editable", "/path/to/pkg1",
             "--with-editable", "/path/to/pkg2",
             "pytest", "tests/",
@@ -162,7 +189,7 @@ class TestRunScript:
         assert call_args == ["uv", "run", "pytest", "tests/"]
 
     @patch("uv_script.runner.subprocess.run")
-    def test_editable_with_extra_args(self, mock_run, simple_scripts):
+    def test_editable_with_extra_args(self, mock_run, simple_scripts, mock_editable_build):
         mock_run.return_value.returncode = 0
         run_script(
             simple_scripts["test"],
@@ -173,12 +200,15 @@ class TestRunScript:
         call_args = mock_run.call_args[0][0]
         assert call_args == [
             "uv", "run",
+            "--find-links", mock_editable_build.editable_dir,
             "--with-editable", "/pkg1",
             "pytest", "tests/", "-k", "foo",
         ]
 
     @patch("uv_script.runner.subprocess.run")
-    def test_editable_applied_to_all_composite_steps(self, mock_run, simple_scripts):
+    def test_editable_applied_to_all_composite_steps(
+        self, mock_run, simple_scripts, mock_editable_build
+    ):
         mock_run.return_value.returncode = 0
         run_script(
             simple_scripts["check"],
@@ -188,17 +218,18 @@ class TestRunScript:
         assert mock_run.call_count == 2
         for call in mock_run.call_args_list:
             cmd = call[0][0]
-            assert cmd[0:4] == ["uv", "run", "--with-editable", "/pkg1"]
+            assert cmd[0:6] == [
+                "uv", "run",
+                "--find-links", mock_editable_build.editable_dir,
+                "--with-editable", "/pkg1",
+            ]
+        mock_editable_build.assert_called_once()
 
     @patch("uv_script.runner.subprocess.run")
-    def test_editable_overlaps_with_project_dependency(self, mock_run, simple_scripts):
-        """--with-editable is added without awareness of project dependencies.
-
-        When package X is both in [project].dependencies and [tool.uvs].editable,
-        the runner just adds --with-editable. This does not tell uv to use the
-        editable to *satisfy* the dependency, so uv resolves X from the index
-        (non-editable) and effectively ignores the editable.
-        """
+    def test_editable_overlaps_with_project_dependency(
+        self, mock_run, simple_scripts, mock_editable_build
+    ):
+        """Verify editables are built locally and passed via --find-links to satisfy dependencies."""
         mock_run.return_value.returncode = 0
         run_script(
             simple_scripts["test"],
@@ -208,6 +239,7 @@ class TestRunScript:
         call_args = mock_run.call_args[0][0]
         assert call_args == [
             "uv", "run",
+            "--find-links", mock_editable_build.editable_dir,
             "--with-editable", "/workspace/X",
             "pytest", "tests/",
         ]
@@ -229,7 +261,7 @@ class TestRunScript:
         ]
 
     @patch("uv_script.runner.subprocess.run")
-    def test_features_with_editable(self, mock_run, simple_scripts):
+    def test_features_with_editable(self, mock_run, simple_scripts, mock_editable_build):
         mock_run.return_value.returncode = 0
         run_script(
             simple_scripts["test"],
@@ -240,6 +272,7 @@ class TestRunScript:
         call_args = mock_run.call_args[0][0]
         assert call_args == [
             "uv", "run",
+            "--find-links", mock_editable_build.editable_dir,
             "--with-editable", "/pkg1",
             "--extra", "speedups",
             "pytest", "tests/",
@@ -273,3 +306,21 @@ class TestRunScript:
         err = capsys.readouterr().err
         assert "MY_VAR=" in err
         assert "uv run echo" in err
+
+    @patch("uv_script.runner.subprocess.run")
+    def test_build_failure_returns_error(
+        self, mock_run, simple_scripts, mock_editable_build, capsys
+    ):
+        mock_editable_build.side_effect = subprocess.CalledProcessError(
+            1, "uv build", stderr="some build error"
+        )
+        exit_code = run_script(
+            simple_scripts["test"],
+            simple_scripts,
+            editable=["/pkg1"],
+        )
+        assert exit_code == 1
+        err = capsys.readouterr().err
+        assert "failed to build editable" in err
+        assert "some build error" in err
+        mock_run.assert_not_called()
