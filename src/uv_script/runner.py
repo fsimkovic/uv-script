@@ -18,7 +18,6 @@ def run_script(
     extra_args: list[str] | None = None,
     verbose: bool = False,
     editable: list[str] | None = None,
-    features: list[str] | None = None,
 ) -> int:
     """Execute a script definition. Returns exit code (0 = success)."""
     steps = resolve_steps(script, all_scripts)
@@ -45,7 +44,7 @@ def run_script(
 
             exit_code = _exec_one(
                 cmd_str, env, verbose,
-                editable=editable, features=features, find_links=find_links,
+                editable=editable, find_links=find_links,
             )
             if exit_code != 0:
                 return exit_code
@@ -102,7 +101,6 @@ def _exec_one(
     env: dict[str, str],
     verbose: bool,
     editable: list[str] | None = None,
-    features: list[str] | None = None,
     find_links: str | None = None,
 ) -> int:
     """Execute a single command string via uv run."""
@@ -113,10 +111,10 @@ def _exec_one(
     editable_flags: list[str] = []
     for path in editable or []:
         editable_flags.extend(["--with-editable", path])
-    features_flags: list[str] = []
-    for name in features or []:
-        features_flags.extend(["--extra", name])
-    full_cmd = ["uv", "run"] + find_links_flags + editable_flags + features_flags + parts
+    full_cmd = (
+        ["uv", "run"] + find_links_flags + editable_flags
+        + ["--all-extras", "--all-groups"] + parts
+    )
 
     if verbose:
         env_prefix = " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())

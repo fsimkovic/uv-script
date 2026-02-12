@@ -24,7 +24,6 @@ class UvsConfig:
 
     scripts: dict[str, ScriptDef]
     editable: list[str] = field(default_factory=list)
-    features: list[str] = field(default_factory=list)
 
 
 class ConfigError(Exception):
@@ -70,16 +69,7 @@ def load_config(pyproject_path: Path | None = None) -> UvsConfig:
             raise ConfigError(f"'editable' items must be strings, got: {entry!r}")
         editable.append(str((project_dir / entry).resolve()))
 
-    raw_features = uvs_table.get("features", [])
-    if not isinstance(raw_features, list):
-        raise ConfigError("'features' must be an array of extra names")
-    features: list[str] = []
-    for entry in raw_features:
-        if not isinstance(entry, str):
-            raise ConfigError(f"'features' items must be strings, got: {entry!r}")
-        features.append(entry)
-
-    return UvsConfig(scripts=scripts, editable=editable, features=features)
+    return UvsConfig(scripts=scripts, editable=editable)
 
 
 def _parse_script(name: str, value: str | list | dict) -> ScriptDef:

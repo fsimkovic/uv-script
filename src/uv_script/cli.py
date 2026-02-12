@@ -39,11 +39,6 @@ def main(argv: list[str] | None = None) -> None:
         help="Ignore editable installs from config",
     )
     parser.add_argument(
-        "--no-features",
-        action="store_true",
-        help="Ignore features (extras) from config",
-    )
-    parser.add_argument(
         "script",
         nargs="?",
         metavar="SCRIPT",
@@ -86,7 +81,6 @@ def main(argv: list[str] | None = None) -> None:
         extra_args = extra_args[1:]
 
     editable = None if parsed.no_editable else (config.editable or None)
-    features = None if parsed.no_features else (config.features or None)
 
     exit_code = run_script(
         script,
@@ -94,7 +88,6 @@ def main(argv: list[str] | None = None) -> None:
         extra_args=extra_args or None,
         verbose=parsed.verbose,
         editable=editable,
-        features=features,
     )
     sys.exit(exit_code)
 

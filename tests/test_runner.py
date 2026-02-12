@@ -108,7 +108,7 @@ class TestRunScript:
         assert exit_code == 0
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
-        assert call_args == ["uv", "run", "pytest", "tests/"]
+        assert call_args == ["uv", "run", "--all-extras", "--all-groups", "pytest", "tests/"]
 
     @patch("uv_script.runner.subprocess.run")
     def test_stops_on_failure(self, mock_run, simple_scripts):
@@ -129,7 +129,9 @@ class TestRunScript:
         mock_run.return_value.returncode = 0
         run_script(simple_scripts["test"], simple_scripts, extra_args=["-k", "foo"])
         call_args = mock_run.call_args[0][0]
-        assert call_args == ["uv", "run", "pytest", "tests/", "-k", "foo"]
+        assert call_args == [
+            "uv", "run", "--all-extras", "--all-groups", "pytest", "tests/", "-k", "foo",
+        ]
 
     @patch("uv_script.runner.subprocess.run")
     def test_env_vars_merged(self, mock_run):
@@ -178,6 +180,7 @@ class TestRunScript:
             "--find-links", mock_editable_build.editable_dir,
             "--with-editable", "/path/to/pkg1",
             "--with-editable", "/path/to/pkg2",
+            "--all-extras", "--all-groups",
             "pytest", "tests/",
         ]
 
@@ -186,7 +189,7 @@ class TestRunScript:
         mock_run.return_value.returncode = 0
         run_script(simple_scripts["test"], simple_scripts)
         call_args = mock_run.call_args[0][0]
-        assert call_args == ["uv", "run", "pytest", "tests/"]
+        assert call_args == ["uv", "run", "--all-extras", "--all-groups", "pytest", "tests/"]
 
     @patch("uv_script.runner.subprocess.run")
     def test_editable_with_extra_args(self, mock_run, simple_scripts, mock_editable_build):
@@ -202,6 +205,7 @@ class TestRunScript:
             "uv", "run",
             "--find-links", mock_editable_build.editable_dir,
             "--with-editable", "/pkg1",
+            "--all-extras", "--all-groups",
             "pytest", "tests/", "-k", "foo",
         ]
 
@@ -218,10 +222,11 @@ class TestRunScript:
         assert mock_run.call_count == 2
         for call in mock_run.call_args_list:
             cmd = call[0][0]
-            assert cmd[0:6] == [
+            assert cmd[0:8] == [
                 "uv", "run",
                 "--find-links", mock_editable_build.editable_dir,
                 "--with-editable", "/pkg1",
+                "--all-extras", "--all-groups",
             ]
         mock_editable_build.assert_called_once()
 
@@ -241,62 +246,28 @@ class TestRunScript:
             "uv", "run",
             "--find-links", mock_editable_build.editable_dir,
             "--with-editable", "/workspace/X",
+            "--all-extras", "--all-groups",
             "pytest", "tests/",
         ]
 
     @patch("uv_script.runner.subprocess.run")
-    def test_features_flags_in_command(self, mock_run, simple_scripts):
+    def test_all_extras_and_groups_applied_to_all_composite_steps(
+        self, mock_run, simple_scripts
+    ):
         mock_run.return_value.returncode = 0
-        run_script(
-            simple_scripts["test"],
-            simple_scripts,
-            features=["speedups", "cli"],
-        )
-        call_args = mock_run.call_args[0][0]
-        assert call_args == [
-            "uv", "run",
-            "--extra", "speedups",
-            "--extra", "cli",
-            "pytest", "tests/",
-        ]
-
-    @patch("uv_script.runner.subprocess.run")
-    def test_features_with_editable(self, mock_run, simple_scripts, mock_editable_build):
-        mock_run.return_value.returncode = 0
-        run_script(
-            simple_scripts["test"],
-            simple_scripts,
-            editable=["/pkg1"],
-            features=["speedups"],
-        )
-        call_args = mock_run.call_args[0][0]
-        assert call_args == [
-            "uv", "run",
-            "--find-links", mock_editable_build.editable_dir,
-            "--with-editable", "/pkg1",
-            "--extra", "speedups",
-            "pytest", "tests/",
-        ]
-
-    @patch("uv_script.runner.subprocess.run")
-    def test_features_applied_to_all_composite_steps(self, mock_run, simple_scripts):
-        mock_run.return_value.returncode = 0
-        run_script(
-            simple_scripts["check"],
-            simple_scripts,
-            features=["speedups"],
-        )
+        run_script(simple_scripts["check"], simple_scripts)
         assert mock_run.call_count == 2
         for call in mock_run.call_args_list:
             cmd = call[0][0]
-            assert cmd[0:4] == ["uv", "run", "--extra", "speedups"]
+            assert "--all-extras" in cmd
+            assert "--all-groups" in cmd
 
     @patch("uv_script.runner.subprocess.run")
     def test_verbose_prints_command_to_stderr(self, mock_run, simple_scripts, capsys):
         mock_run.return_value.returncode = 0
         run_script(simple_scripts["test"], simple_scripts, verbose=True)
         err = capsys.readouterr().err
-        assert "$ uv run pytest tests/" in err
+        assert "$ uv run --all-extras --all-groups pytest tests/" in err
 
     @patch("uv_script.runner.subprocess.run")
     def test_verbose_with_env_prints_env_prefix(self, mock_run, capsys):
@@ -305,7 +276,7 @@ class TestRunScript:
         run_script(script, {"s": script}, verbose=True)
         err = capsys.readouterr().err
         assert "MY_VAR=" in err
-        assert "uv run echo" in err
+        assert "uv run --all-extras --all-groups echo" in err
 
     @patch("uv_script.runner.subprocess.run")
     def test_build_failure_returns_error(
